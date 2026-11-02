@@ -92,6 +92,8 @@ class GamepadInput {
 
     private fun isPad(device: InputDevice): Boolean {
         if (device.isVirtual) return false
+        // Ignora dispositivos integrados (stylus, huella, botones de vendor) que toman la ranura 0
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && !device.isExternal) return false
         val sources = device.sources
         val joystick = sources and InputDevice.SOURCE_JOYSTICK == InputDevice.SOURCE_JOYSTICK
         val gamepad = sources and InputDevice.SOURCE_GAMEPAD == InputDevice.SOURCE_GAMEPAD
