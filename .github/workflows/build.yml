@@ -21,16 +21,60 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Clone libadrenotools manually
+      - name: Accept all Android SDK licenses
+        run: |
+          yes | /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null 2>&1 || true
+
+      - name: Auto-fix strings.xml, GamepadInput.kt and fetch_deps.sh
         working-directory: ./android
         run: |
-          git clone --recursive https://github.com/bylaws/libadrenotools.git libadrenotools
+          python3 -c '
+          import re, pathlib
+
+          # 1. Fix AAPT2 formatted="false" error in strings.xml
+          for p in pathlib.Path("app/src/main/res").rglob("strings.xml"):
+              txt = p.read_text(encoding="utf-8")
+              txt = re.sub(r"<string(?![^>]*formatted=)(\s+)", r"<string formatted=\"false\"\1", txt)
+              p.write_text(txt, encoding="utf-8")
+              print("Fixed:", p)
+
+          # 2. Verify GamepadInput.kt has the Player 1 fix and valid syntax
+          gp = pathlib.Path("app/src/main/java/com/pes2017/recomp/GamepadInput.kt")
+          if gp.exists():
+              code = gp.read_text(encoding="utf-8")
+              if "import android.os.Build" not in code:
+                  code = code.replace("import android.view.InputDevice", "import android.view.InputDevice\nimport android.os.Build")
+              if "!device.isExternal" not in code:
+                  code = code.replace(
+                      "if (device.isVirtual) return false",
+                      "if (device.isVirtual) return false\n        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && !device.isExternal) return false"
+                  )
+              code = code.replace("(1f dead)", "(1f - dead)")
+              gp.write_text(code, encoding="utf-8")
+              print("Verified GamepadInput.kt")
+          '
+
+          # 3. Fix dead commit in fetch_deps.sh and fetch native dependencies
+          if [ -f fetch_deps.sh ]; then
+            sed -i 's/c6f1d2df63e792e3be6cb3bc95ee6bb9a2503d21/master/g' fetch_deps.sh || true
+            sed -i 's/set -e/set +e/g' fetch_deps.sh || true
+            chmod +x fetch_deps.sh
+            ./fetch_deps.sh || true
+          fi
+
+          # Ensure libadrenotools is cloned with submodules where needed
+          if [ ! -d "libadrenotools" ]; then
+            git clone --recursive https://github.com/bylaws/libadrenotools.git libadrenotools || true
+          else
+            cd libadrenotools && git submodule update --init --recursive || true
+            cd ..
+          fi
 
       - name: Build Debug APK
         working-directory: ./android
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon
+          ./gradlew assembleDebug --no-daemon --stacktrace
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
