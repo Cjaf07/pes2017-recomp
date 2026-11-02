@@ -3,6 +3,7 @@ package com.pes2017.recomp
 import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
+import android.os.Build
 import kotlin.math.abs
 
 /**
