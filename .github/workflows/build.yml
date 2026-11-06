@@ -25,20 +25,26 @@ jobs:
         run: |
           yes | /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null 2>&1 || true
 
-      - name: Auto-fix strings.xml, GamepadInput.kt and fetch_deps.sh
+      - name: Auto-fix strings.xml, GamepadInput.kt and dependencies
         working-directory: ./android
         run: |
-          python3 -c '
+          python3 - << 'EOF'
           import re, pathlib
 
-          # 1. Fix AAPT2 formatted="false" error in strings.xml
+          # 1. Corrige strings.xml con comillas limpias
+          def fix_string_tag(match):
+              tag = match.group(0)
+              if "formatted=" in tag:
+                  return tag
+              return tag[:-1] + ' formatted="false">'
+
           for p in pathlib.Path("app/src/main/res").rglob("strings.xml"):
               txt = p.read_text(encoding="utf-8")
-              txt = re.sub(r"<string(?![^>]*formatted=)(\s+)", r"<string formatted=\"false\"\1", txt)
+              txt = re.sub(r"<string\b[^>]*>", fix_string_tag, txt)
               p.write_text(txt, encoding="utf-8")
-              print("Fixed:", p)
+              print("Fixed XML:", p)
 
-          # 2. Verify GamepadInput.kt has the Player 1 fix and valid syntax
+          # 2. Verifica GamepadInput.kt con el fix del Jugador 1
           gp = pathlib.Path("app/src/main/java/com/pes2017/recomp/GamepadInput.kt")
           if gp.exists():
               code = gp.read_text(encoding="utf-8")
@@ -52,9 +58,8 @@ jobs:
               code = code.replace("(1f dead)", "(1f - dead)")
               gp.write_text(code, encoding="utf-8")
               print("Verified GamepadInput.kt")
-          '
+          EOF
 
-          # 3. Fix dead commit in fetch_deps.sh and fetch native dependencies
           if [ -f fetch_deps.sh ]; then
             sed -i 's/c6f1d2df63e792e3be6cb3bc95ee6bb9a2503d21/master/g' fetch_deps.sh || true
             sed -i 's/set -e/set +e/g' fetch_deps.sh || true
@@ -62,7 +67,6 @@ jobs:
             ./fetch_deps.sh || true
           fi
 
-          # Ensure libadrenotools is cloned with submodules where needed
           if [ ! -d "libadrenotools" ]; then
             git clone --recursive https://github.com/bylaws/libadrenotools.git libadrenotools || true
           else
